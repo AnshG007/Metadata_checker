@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import re
 import json
+import shutil
 
 file_name_header_absent = []
 new_header_data = []
@@ -28,8 +29,10 @@ amount = []
 unit_price_errors = []
 
 #read_json 
-json_file = pd.read_json(path_or_buf=r"C:\Users\DELL\Desktop\dataset-48\validation\metadata.jsonl", lines=True)
+#json_file = pd.read_json(path_or_buf=r"C:\Users\DELL\Desktop\dataset-48\validation\metadata.jsonl", lines=True)
+json_file = pd.read_json(path_or_buf=r"C:\Users\DELL\Desktop\dataset-48\train\metadata.jsonl", lines=True)
 ground_truth = json_file.get('ground_truth').to_list()
+
 full_file_name_data = json_file.get('file_name').to_list()
 
 #function for removing gt_parse
@@ -345,7 +348,87 @@ def combined_csv():
                 temp = file.replace('.csv', '')
                 json_load = pd.read_csv(os.path.join(output_path, file))
                 json_load.to_excel(writer, sheet_name=temp, index=False)
-                
+
+def headerChecking(new_json_file):
+        
+    if "header" in new_json_file:
+        header = new_json_file.get("header")
+        
+        required_keys = {'salesOrderNumber', 'invoiceNumber', 'poNumber', 'invoiceDate'}
+        r = {'invoiceNumber', 'poNumber', 'invoiceDate'}
+        if set(header.keys()) == required_keys or set(header.keys())==r:
+           return True
+    return False
+
+def itemsChecking(new_json_file):
+    if "items" in new_json_file:
+        
+        line_number = []
+        items = new_json_file.get("items")
+        
+        required_keys = {'productCode', 'productDesc', 'orderedQuantity', 'backOrderedQuantity', 'shippedQuantity', 'amount', 'unitPrice'} #7
+        required_keys_for_colony = {'shippedQuantity', 'productName', 'productCode', 'amount', 'productDesc', 'unitPrice'} #6
+        required_keys_for_conserve = {'shippedQuantity', 'amount', 'unitPrice', 'backOrderedQuantity', 'productDesc', 'orderedQuantity', 'productName', 'lineNumber'} #8
+        required_keys_for_EW = {'lineNumber' , 'orderedQuantity' , 'unitPrice' , 'amount' , 'productDesc'}#5
+        required_keys_for_Michaels = {'lineNumber' , 'productDesc' , 'backOrderedQuantity' , 'orderedQuantity' , 'shippedQuantity' , 'unitPrice' , 'amount'}#7
+        
+        for index, item in enumerate(items):
+            try :
+                item_keys_set = set(item.keys())
+                if required_keys == item_keys_set or required_keys_for_colony == item_keys_set or required_keys_for_conserve ==  item_keys_set or required_keys_for_EW == item_keys_set or required_keys_for_Michaels == item_keys_set:
+                    pass
+                else:
+                    line_number.append(index)
+                if len(line_number) == 0:
+                    return True
+            except:
+                pass
+    return False
+              
+def correct_files(full_list, full_file_name_data):
+    file_name = set()
+
+    for index, i in enumerate(full_list):
+        new_json_file = json.loads(i)
+        header = headerChecking(new_json_file)
+        items = itemsChecking(new_json_file)
+
+        if header and items:
+            file_name.add(full_file_name_data[index])
+
+    return file_name
+pattern = r'\{"gt_parse": '  # Pattern which we want to remove
+result = process_ground_truth(ground_truth, pattern)
+file_name = correct_files(result , full_file_name_data)
+
+
+def make_folder():
+    desktop_path = os.path.join(os.path.expanduser('~'), 'Desktop')
+    folder_path = os.path.join(desktop_path, "Corrected_files")
+    os.makedirs(folder_path, exist_ok=True)
+    return folder_path
+
+source_folder = r"C:\Users\DELL\Desktop\dataset-48\train"
+
+for filename in os.listdir(source_folder):
+    if filename in file_name:
+        source_file_path = os.path.join(source_folder, filename)
+        destination_folder = make_folder()
+
+        if os.path.exists(source_file_path):
+            shutil.copy(source_file_path, destination_folder)
+        else:
+            print('folder not exist')
+
+dest_path = os.path.join(make_folder() , "metadata.jsonl")
+for index , value in enumerate(json_file["file_name"]):
+    if value in file_name:
+        print(index , value)
+        dict = {"ground_truth":json_file["ground_truth"][index] , "file_name":value}
+        with open(dest_path , "a") as a:
+            json.dump(dict , a)
+            a.write('\n')
+
 if __name__ == '__main__':
     pattern = r'\{"gt_parse": '  # Pattern which we want to remove
     result = process_ground_truth(ground_truth, pattern)
